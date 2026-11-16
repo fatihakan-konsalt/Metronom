@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Metronom</string>
+    <string name="title_activity_main">Metronom</string>
+    <string name="package_name">tr.metronom.app</string>
+    <string name="custom_url_scheme">tr.metronom.app</string>
+</resources>

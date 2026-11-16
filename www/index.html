@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}[hidden]{display:none!important}</style>
+<title>Metronom</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* Layout: one instrument panel, centered; tempo readout on top, transport in the middle, settings below */
+:root {
+  --bg: #e9edf2;
+  --panel: #f8fafc;
+  --fg: #16212c;
+  --muted: #5d6b7a;
+  --line: #cfd7e0;
+  --accent: #2753c4;      /* regular beat */
+  --down: #e0631a;        /* downbeat */
+  --accent-fg: #ffffff;
+  --chip: #e1e7ee;
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151c; --panel: #18212b; --fg: #e8eef5; --muted: #8e9cab; --line: #2a3644;
+    --accent: #6b91ff; --down: #ff8a45; --accent-fg: #0b1118; --chip: #222d39; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151c; --panel: #18212b; --fg: #e8eef5; --muted: #8e9cab; --line: #2a3644;
+  --accent: #6b91ff; --down: #ff8a45; --accent-fg: #0b1118; --chip: #222d39; color-scheme: dark;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { min-height: 100%; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 32px;
+  -webkit-user-select: none; user-select: none;
+  touch-action: manipulation;
+}
+.wrap { max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+
+.panel {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 20px;
+  padding: 20px; display: flex; flex-direction: column; gap: 18px;
+}
+
+/* Beat lights */
+.beats { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; min-height: 34px; align-items: center; }
+.beat {
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 2px solid var(--line); background: transparent; padding: 0; cursor: pointer;
+  transition: transform .08s ease, background-color .08s ease;
+}
+.beat.acc { border-color: var(--down); }
+.beat.mute { border-style: dashed; opacity: .45; }
+.beat.on { background: var(--accent); border-color: var(--accent); transform: scale(1.2); }
+.beat.acc.on { background: var(--down); border-color: var(--down); }
+
+/* Tempo readout */
+.readout { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.bpm {
+  font-family: var(--font-display); font-weight: 700; font-size: clamp(84px, 24vw, 132px);
+  line-height: .95; font-variant-numeric: tabular-nums; letter-spacing: -0.03em;
+}
+.unit { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.marking { font-family: var(--font-display); font-style: italic; font-size: 20px; color: var(--accent); margin-top: 6px; }
+
+.adjust { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+button {
+  font: inherit; color: var(--fg); background: var(--chip); border: 1px solid transparent;
+  border-radius: 12px; min-height: 48px; cursor: pointer;
+}
+button:active { transform: scale(.97); }
+button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+input[type=range] { width: 100%; height: 36px; accent-color: var(--accent); }
+
+.transport { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; }
+#play {
+  background: var(--accent); color: var(--accent-fg); font-family: var(--font-display);
+  font-size: 22px; font-weight: 700; min-height: 72px; border-radius: 16px;
+}
+#play.running { background: var(--down); }
+#tap { font-family: var(--font-display); font-size: 18px; font-weight: 500; min-height: 72px; border-radius: 16px; }
+#tap.flash { background: var(--line); }
+
+/* Settings */
+.row { display: flex; flex-direction: column; gap: 8px; }
+.label { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; }
+.label b { font-weight: 600; color: var(--fg); letter-spacing: 0; text-transform: none; font-size: 14px; }
+.seg { display: flex; gap: 6px; flex-wrap: wrap; }
+.seg button { flex: 1 1 0; min-width: 48px; min-height: 44px; font-weight: 500; }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--panel); }
+.stepper { display: grid; grid-template-columns: 48px 1fr 48px; gap: 8px; align-items: center; }
+.stepper output { text-align: center; font-family: var(--font-display); font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.note { font-size: 13px; color: var(--muted); line-height: 1.5; }
+.toggle { display: flex; align-items: center; gap: 10px; font-size: 15px; min-height: 40px; }
+.toggle input { width: 22px; height: 22px; accent-color: var(--accent); }
+
+@media (prefers-reduced-motion: reduce) { .beat { transition: none; } .beat.on { transform: none; } }
+</style>
+
+<div class="wrap">
+  <section class="panel" aria-label="Tempo">
+    <div class="beats" id="beats" aria-label="Vuruşlar (dokunarak aksan / sessiz / normal değiştir)"></div>
+
+    <div class="readout">
+      <div class="bpm" id="bpmText" aria-live="polite">100</div>
+      <div class="unit">vuruş / dakika</div>
+      <div class="marking" id="marking">Andante</div>
+    </div>
+
+    <input type="range" id="bpmRange" min="20" max="280" step="1" value="100" aria-label="Tempo (BPM)">
+
+    <div class="adjust">
+      <button id="m5" type="button" aria-label="5 azalt">−5</button>
+      <button id="m1" type="button" aria-label="1 azalt">−1</button>
+      <button id="p1" type="button" aria-label="1 artır">+1</button>
+      <button id="p5" type="button" aria-label="5 artır">+5</button>
+    </div>
+
+    <div class="transport">
+      <button id="play" type="button">Başlat</button>
+      <button id="tap" type="button">Tap</button>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="Ayarlar">
+    <div class="row">
+      <div class="label">Ölçü <b id="meterText">4/4</b></div>
+      <div class="stepper">
+        <button id="beatsMinus" type="button" aria-label="Vuruş azalt">−</button>
+        <output id="beatsOut">4</output>
+        <button id="beatsPlus" type="button" aria-label="Vuruş artır">+</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="label">Bölme</div>
+      <div class="seg" id="subSeg">
+        <button type="button" data-v="1" aria-label="Dörtlük">♩</button>
+        <button type="button" data-v="2" aria-label="Sekizlik">♪♪</button>
+        <button type="button" data-v="3" aria-label="Triole">3</button>
+        <button type="button" data-v="4" aria-label="Onaltılık">♬♬</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="label">Ses</div>
+      <div class="seg" id="soundSeg">
+        <button type="button" data-v="click">Klik</button>
+        <button type="button" data-v="wood">Tahta</button>
+        <button type="button" data-v="beep">Bip</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="label">Ses seviyesi <b id="volText">80%</b></div>
+      <input type="range" id="vol" min="0" max="100" step="1" value="80" aria-label="Ses seviyesi">
+    </div>
+
+    <label class="toggle"><input type="checkbox" id="flash"> Ekranı vuruşla yak</label>
+
+    <p class="note">Vuruş noktalarına dokunarak aksan, normal ve sessiz arasında geçiş yapabilirsin. Klavyede boşluk tuşu başlatır/durdurur, oklar tempoyu değiştirir. iPad'de ses gelmezse yan sessiz anahtarını ve ses seviyesini kontrol et.</p>
+  </section>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  const MARKINGS = [
+    [24, "Larghissimo"], [40, "Grave"], [45, "Lento"], [55, "Largo"], [66, "Adagio"],
+    [76, "Adagietto"], [92, "Andante"], [108, "Moderato"], [120, "Allegretto"],
+    [156, "Allegro"], [176, "Vivace"], [200, "Presto"], [999, "Prestissimo"]
+  ];
+
+  const state = {
+    bpm: 100, beats: 4, sub: 1, sound: "click", vol: 0.8, flash: false,
+    pattern: null // per beat: 2 = accent, 1 = normal, 0 = mute
+  };
+
+  // ---------- persistence ----------
+  function load() {
+    try {
+      const s = JSON.parse(localStorage.getItem("metronome") || "null");
+      if (s) Object.assign(state, s);
+    } catch (e) {}
+    if (!Array.isArray(state.pattern) || state.pattern.length !== state.beats) state.pattern = defaultPattern(state.beats);
+  }
+  function save() { try { localStorage.setItem("metronome", JSON.stringify(state)); } catch (e) {} }
+  function defaultPattern(n) { return Array.from({ length: n }, (_, i) => (i === 0 && n > 1 ? 2 : 1)); }
+
+  // ---------- DOM ----------
+  const $ = (id) => document.getElementById(id);
+  const beatsEl = $("beats"), bpmText = $("bpmText"), marking = $("marking"), bpmRange = $("bpmRange");
+  const playBtn = $("play"), tapBtn = $("tap"), vol = $("vol");
+
+  function renderBeats() {
+    beatsEl.innerHTML = "";
+    state.pattern.forEach((p, i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "beat" + (p === 2 ? " acc" : "") + (p === 0 ? " mute" : "");
+      b.setAttribute("aria-label", (i + 1) + ". vuruş: " + (p === 2 ? "aksan" : p === 0 ? "sessiz" : "normal"));
+      b.addEventListener("click", () => {
+        state.pattern[i] = p === 1 ? 2 : p === 2 ? 0 : 1;
+        renderBeats(); save();
+      });
+      beatsEl.appendChild(b);
+    });
+  }
+
+  function setBpm(v) {
+    state.bpm = Math.max(20, Math.min(280, Math.round(v)));
+    bpmText.textContent = state.bpm;
+    bpmRange.value = state.bpm;
+    marking.textContent = MARKINGS.find(([max]) => state.bpm < max)[1];
+    save();
+  }
+
+  function setBeats(n) {
+    n = Math.max(1, Math.min(12, n));
+    const old = state.pattern || [];
+    state.beats = n;
+    state.pattern = defaultPattern(n).map((d, i) => (i < old.length ? old[i] : d));
+    $("beatsOut").textContent = n;
+    $("meterText").textContent = n + "/4";
+    renderBeats(); save();
+  }
+
+  function setSeg(segId, value) {
+    document.querySelectorAll("#" + segId + " button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === String(value))));
+  }
+
+  // ---------- audio ----------
+  let ctx = null, master = null;
+  function ensureAudio() {
+    if (!ctx) {
+      try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
+      const AC = window.AudioContext || window.webkitAudioContext;
+      ctx = new AC();
+      master = ctx.createGain();
+      master.gain.value = state.vol;
+      master.connect(ctx.destination);
+      // unlock on iOS: play one silent sample inside the user gesture
+      const buf = ctx.createBuffer(1, 1, 22050);
+      const src = ctx.createBufferSource();
+      src.buffer = buf; src.connect(ctx.destination); src.start(0);
+    }
+    if (ctx.state !== "running") ctx.resume();
+  }
+
+  let noiseBuf = null;
+  function noise() {
+    if (!noiseBuf) {
+      noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 0.05, ctx.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
+    }
+    return noiseBuf;
+  }
+
+  // level: 2 = accent, 1 = beat, 0.5 = subdivision
+  function playTick(time, level) {
+    const g = ctx.createGain();
+    g.connect(master);
+    const peak = level === 2 ? 1 : level === 1 ? 0.7 : 0.35;
+
+    if (state.sound === "wood") {
+      const src = ctx.createBufferSource();
+      src.buffer = noise();
+      const bp = ctx.createBiquadFilter();
+      bp.type = "bandpass"; bp.Q.value = 8;
+      bp.frequency.value = level === 2 ? 2400 : level === 1 ? 1800 : 1300;
+      src.connect(bp); bp.connect(g);
+      g.gain.setValueAtTime(peak * 3, time);
+      src.start(time); src.stop(time + 0.05);
+      return;
+    }
+
+    const osc = ctx.createOscillator();
+    const freq = level === 2 ? 1600 : level === 1 ? 1100 : 800;
+    if (state.sound === "beep") {
+      osc.type = "sine"; osc.frequency.value = freq * 0.55;
+      g.gain.setValueAtTime(0.0001, time);
+      g.gain.exponentialRampToValueAtTime(peak, time + 0.004);
+      g.gain.setValueAtTime(peak, time + 0.06);
+      g.gain.exponentialRampToValueAtTime(0.0001, time + 0.1);
+      osc.connect(g); osc.start(time); osc.stop(time + 0.11);
+    } else {
+      osc.type = "square"; osc.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, time);
+      g.gain.exponentialRampToValueAtTime(peak * 0.6, time + 0.001);
+      g.gain.exponentialRampToValueAtTime(0.0001, time + 0.03);
+      osc.connect(g); osc.start(time); osc.stop(time + 0.04);
+    }
+  }
+
+  // ---------- scheduler (lookahead) ----------
+  const LOOKAHEAD_MS = 25, AHEAD_S = 0.12;
+  let running = false, timer = null, nextTime = 0, step = 0;
+  const queue = []; // {time, beat, isMain}
+
+  function scheduler() {
+    while (nextTime < ctx.currentTime + AHEAD_S) {
+      const sub = state.sub;
+      const totalSteps = state.beats * sub;
+      step %= totalSteps;
+      const beat = Math.floor(step / sub);
+      const isMain = step % sub === 0;
+      const p = state.pattern[beat] ?? 1;
+      if (p !== 0) playTick(nextTime, isMain ? (p === 2 ? 2 : 1) : 0.5);
+      if (isMain) queue.push({ time: nextTime, beat });
+      nextTime += 60 / state.bpm / sub;
+      step++;
+    }
+  }
+
+  let lastShown = -1;
+  function draw() {
+    if (!running) return;
+    const now = ctx.currentTime;
+    let cur = null;
+    while (queue.length && queue[0].time <= now) cur = queue.shift();
+    if (cur) {
+      const dots = beatsEl.children;
+      for (let i = 0; i < dots.length; i++) dots[i].classList.toggle("on", i === cur.beat);
+      if (state.flash) {
+        document.body.style.backgroundColor = state.pattern[cur.beat] === 2 ? "var(--down)" : "var(--line)";
+        setTimeout(() => { document.body.style.backgroundColor = ""; }, 80);
+      }
+      lastShown = cur.beat;
+    }
+    requestAnimationFrame(draw);
+  }
+
+  let wakeLock = null;
+  async function keepAwake(on) {
+    try {
+      if (on && "wakeLock" in navigator) wakeLock = await navigator.wakeLock.request("screen");
+      else if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+    } catch (e) {}
+  }
+
+  function start() {
+    ensureAudio();
+    running = true; step = 0; queue.length = 0;
+    nextTime = ctx.currentTime + 0.06;
+    scheduler();
+    timer = setInterval(scheduler, LOOKAHEAD_MS);
+    playBtn.textContent = "Durdur"; playBtn.classList.add("running");
+    keepAwake(true);
+    requestAnimationFrame(draw);
+  }
+  function stop() {
+    running = false; clearInterval(timer); queue.length = 0;
+    for (const d of beatsEl.children) d.classList.remove("on");
+    document.body.style.backgroundColor = "";
+    playBtn.textContent = "Başlat"; playBtn.classList.remove("running");
+    keepAwake(false);
+  }
+  function toggle() { running ? stop() : start(); }
+
+  // ---------- tap tempo ----------
+  let taps = [];
+  function tap() {
+    const t = performance.now();
+    if (taps.length && t - taps[taps.length - 1] > 2000) taps = [];
+    taps.push(t);
+    if (taps.length > 6) taps.shift();
+    if (taps.length >= 2) {
+      const gaps = taps.slice(1).map((v, i) => v - taps[i]);
+      setBpm(60000 / (gaps.reduce((a, b) => a + b, 0) / gaps.length));
+    }
+    tapBtn.classList.add("flash");
+    setTimeout(() => tapBtn.classList.remove("flash"), 90);
+  }
+
+  // ---------- wiring ----------
+  playBtn.addEventListener("click", toggle);
+  tapBtn.addEventListener("click", tap);
+  bpmRange.addEventListener("input", () => setBpm(+bpmRange.value));
+  [["m5", -5], ["m1", -1], ["p1", 1], ["p5", 5]].forEach(([id, d]) => $(id).addEventListener("click", () => setBpm(state.bpm + d)));
+  $("beatsMinus").addEventListener("click", () => setBeats(state.beats - 1));
+  $("beatsPlus").addEventListener("click", () => setBeats(state.beats + 1));
+  document.querySelectorAll("#subSeg button").forEach((b) => b.addEventListener("click", () => { state.sub = +b.dataset.v; setSeg("subSeg", state.sub); save(); }));
+  document.querySelectorAll("#soundSeg button").forEach((b) => b.addEventListener("click", () => { state.sound = b.dataset.v; setSeg("soundSeg", state.sound); save(); }));
+  vol.addEventListener("input", () => {
+    state.vol = vol.value / 100;
+    $("volText").textContent = vol.value + "%";
+    if (master) master.gain.value = state.vol;
+    save();
+  });
+  $("flash").addEventListener("change", (e) => { state.flash = e.target.checked; save(); });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "INPUT" && e.target.type !== "checkbox") return;
+    if (e.code === "Space") { e.preventDefault(); toggle(); }
+    else if (e.key === "ArrowUp" || e.key === "ArrowRight") { e.preventDefault(); setBpm(state.bpm + (e.shiftKey ? 5 : 1)); }
+    else if (e.key === "ArrowDown" || e.key === "ArrowLeft") { e.preventDefault(); setBpm(state.bpm - (e.shiftKey ? 5 : 1)); }
+    else if (e.key === "t" || e.key === "T") tap();
+  });
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && running) keepAwake(true); });
+
+  // ---------- init ----------
+  load();
+  setBeats(state.beats);
+  setBpm(state.bpm);
+  setSeg("subSeg", state.sub);
+  setSeg("soundSeg", state.sound);
+  vol.value = Math.round(state.vol * 100);
+  $("volText").textContent = vol.value + "%";
+  $("flash").checked = !!state.flash;
+})();
+</script>
+</html>
